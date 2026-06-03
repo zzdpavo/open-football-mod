@@ -93,6 +93,7 @@ impl StaffStub {
             training_schedule: vec![],
             recent_events: Vec::new(),
             specialization_days: [0; 4],
+            manager_career: None,
         };
         staff
     }
