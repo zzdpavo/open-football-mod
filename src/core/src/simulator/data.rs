@@ -7,6 +7,7 @@ use super::seeding::{
 use crate::NationalSelectionPolicy;
 use crate::NationalTeam;
 use crate::PlayerSquadStatus;
+use crate::career::interactive::GameState;
 use crate::club::board::manager_market::ManagerApproach;
 use crate::club::player::calculators::WageCalculator;
 use crate::competitions::GlobalCompetitions;
@@ -80,6 +81,8 @@ pub struct SimulatorData {
     /// date) and walks every free agent. Crate-private because the
     /// snapshot type is internal to the country/result module.
     pub(crate) daily_global_free_agents: Option<Vec<GlobalFreeAgentSummary>>,
+
+    pub(crate) game_state: GameState,
 }
 
 impl SimulatorData {
@@ -154,6 +157,7 @@ impl SimulatorData {
             match_store: MatchStorage::new(),
             daily_world_player_pool: None,
             daily_global_free_agents: None,
+            game_state: GameState::new_autonomous(),
         };
 
         let mut indexes = SimulatorDataIndexes::new();
@@ -626,6 +630,14 @@ impl SimulatorData {
             }
         }
         counts
+    }
+
+    pub fn game_state(&self) -> &GameState {
+        &self.game_state
+    }
+
+    pub fn game_state_mut(&mut self) -> &mut GameState {
+        &mut self.game_state
     }
 
     /// World-level national-team call-ups. Runs at the start of each

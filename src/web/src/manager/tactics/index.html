@@ -1,0 +1,134 @@
+{% extends "manager/manager_layout.html" %}
+
+{% block html_title %}Tactics | {{ i18n.t("site_name") }}{% endblock %}
+
+{% block content %}
+<div class="fm-page">
+    {% if has_pending_match %}
+    <section class="fm-panel">
+        <div class="fm-panel-head">
+            <h3>Upcoming Match</h3>
+            <span class="fm-badge fm-badge-inj">vs {{ opponent }}</span>
+        </div>
+        <div class="fm-mgr-match-info">
+            <span>{{ competition }}</span>
+        </div>
+    </section>
+
+    <section class="fm-panel" style="margin-top:16px">
+        <div class="fm-panel-head">
+            <h3>Tactical Setup</h3>
+        </div>
+        <form id="tactics-form" class="fm-mgr-form">
+            <div class="fm-mgr-form-row">
+                <div class="fm-mgr-form-group">
+                    <label class="fm-mgr-label">Formation</label>
+                    <select class="fm-mgr-select" id="formation">
+                        {% for f in formations %}
+                        <option value="{{ f }}" {% if f == default_formation %}selected{% endif %}>{{ f }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="fm-mgr-form-group">
+                    <label class="fm-mgr-label">Approach</label>
+                    <select class="fm-mgr-select" id="approach">
+                        {% for a in approaches %}
+                        <option value="{{ a }}">{{ a }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+            </div>
+        </form>
+    </section>
+
+    <section class="fm-panel" style="margin-top:16px">
+        <div class="fm-panel-head">
+            <h3>Starting XI <span class="fm-panel-count" id="selected-count">0/11</span></h3>
+        </div>
+        <table class="fm-squad">
+            <thead>
+                <tr>
+                    <th class="sq-inf"></th>
+                    <th class="sq-name">Name</th>
+                    <th>Position</th>
+                    <th>Ability</th>
+                    <th class="sq-cond">Condition</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for p in players %}
+                <tr>
+                    <td class="sq-inf"><input type="checkbox" class="player-cb" value="{{ p.id }}"></td>
+                    <td class="sq-name">{{ p.name }}</td>
+                    <td>{{ p.position }}</td>
+                    <td>{{ p.ability }}</td>
+                    <td class="sq-cond">
+                        <div class="fm-cond">
+                            <div class="fm-cond-bar"><div class="fm-cond-fill" style="width:{{ p.condition }}%"></div></div>
+                            <span class="fm-cond-val">{{ p.condition }}%</span>
+                        </div>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        <div class="fm-mgr-form-actions">
+            <button type="button" class="fm-mgr-btn fm-mgr-btn-primary" id="submit-tactics-btn" disabled onclick="submitTactics()">
+                <i class="fa fa-check"></i> Submit Tactics
+            </button>
+        </div>
+    </section>
+
+    {% else %}
+    <section class="fm-panel">
+        <div class="fm-panel-head">
+            <h3>No Upcoming Match</h3>
+        </div>
+        <div class="fm-mgr-empty">
+            <p>Advance the day to trigger a match.</p>
+            <button class="fm-mgr-btn fm-mgr-btn-primary" onclick="advanceDay()">
+                <i class="fa fa-forward"></i> Advance Day
+            </button>
+        </div>
+    </section>
+    {% endif %}
+</div>
+
+<script>
+const cbs = document.querySelectorAll('.player-cb');
+const counter = document.getElementById('selected-count');
+const btn = document.getElementById('submit-tactics-btn');
+
+function updateCount() {
+    const count = document.querySelectorAll('.player-cb:checked').length;
+    if (counter) counter.textContent = count + '/11';
+    if (btn) btn.disabled = count !== 11;
+}
+
+cbs.forEach(cb => cb.addEventListener('change', updateCount));
+
+function submitTactics() {
+    const starting_xi = Array.from(document.querySelectorAll('.player-cb:checked')).map(cb => parseInt(cb.value));
+    const data = {
+        formation: document.getElementById('formation').value,
+        approach: document.getElementById('approach').value,
+        starting_xi,
+        captain_id: null,
+        penalty_taker_id: null,
+        free_kick_taker_id: null
+    };
+    fetch('/api/game/career/tactics', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data)
+    })
+    .then(r => r.json())
+    .then(result => { if (result.success) { location.reload(); } else { alert(result.error || 'Failed'); } });
+}
+
+function advanceDay() {
+    fetch('/api/game/career/advance', { method: 'POST' })
+        .then(() => location.reload());
+}
+</script>
+{% endblock %}

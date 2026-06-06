@@ -11,6 +11,8 @@ pub use data::SimulatorData;
 pub use matchday::WorldMatchdayResult;
 pub use result::{SimulationResult, WorldWorkloadCounts};
 
+pub use crate::career::interactive::{DecisionPoint, GameState, UserManager};
+
 use crate::MatchRuntime;
 use crate::ai::AiBatchProcessor;
 use crate::club::ai::apply_ai_responses;
@@ -25,13 +27,15 @@ use crate::continent::national::world as national_world;
 use crate::country::result::transfers::{GlobalFreeAgentSummary, snapshot_global_free_agents};
 use crate::league::result::WorldSnapshot;
 use crate::performance::{PerfCounters, PerfPhase, TickEndContext};
+use crate::league::season::Season;
 use crate::transfers::pipeline::{PipelineProcessor, PlayerSummary};
+use crate::transfers::window::TransferWindowManager;
 use crate::utils::DateUtils;
 use awards::{
     MondayAwardCache, MonthlyAwardsTick, SeasonAwardsTick, TeamOfTheWeekTick, TeamOfTheYearTick,
     WeeklyAwardsTick, WorldPlayerOfYearTick, YoungTeamOfTheWeekTick, YoungWeeklyAwardsTick,
 };
-use chrono::{Datelike, Duration, Weekday};
+use chrono::{Datelike, Duration, NaiveDate, Weekday};
 use rayon::prelude::*;
 use std::any::Any;
 use std::panic::{self, AssertUnwindSafe};
@@ -91,6 +95,18 @@ impl FootballSimulator {
         let current_date = data.date;
 
         let ctx = GlobalContext::new(SimulationContext::new(data.date));
+
+        if data.game_state.interactive_mode
+            && let Some(choice) = data.game_state_mut().take_pending_tactics()
+            && let Some(ref user_mgr) = data.game_state().user_manager
+        {
+            let club_id = user_mgr.club_id;
+            if let Some(club) = data.club_mut(club_id) {
+                if let Some(main_team) = club.teams.main_mut() {
+                    main_team.tactics = Some(choice.to_tactics());
+                }
+            }
+        }
 
         // National-team call-ups run at the world level so a player's
         // nationality and their club's continent can differ. Must
@@ -416,6 +432,199 @@ impl FootballSimulator {
         }
 
         data.next_date();
+
+        // Turn gate: if interactive mode is active and the user has a
+        // career, check whether a decision point was reached this tick.
+        // When a decision is found, store it on GameState and surface it
+        // in the result so the caller knows to pause simulation.
+        if data.game_state.interactive_mode && data.game_state.user_manager.is_some() {
+            let user_club_id = data.game_state.user_manager.as_ref().unwrap().club_id;
+            let current_date = data.date;
+            let current_date_chrono: NaiveDate = current_date.date();
+
+            // --- Pre-match detection (pre-simulation) ---
+            // Check league schedule for today's fixture BEFORE simulation runs.
+            // This lets the user know about upcoming matches and set tactics.
+            let user_team_id = data
+                .club(user_club_id)
+                .and_then(|c| c.teams.main())
+                .map(|t| t.id);
+
+            let has_user_match_today = if let Some(tid) = user_team_id {
+                data.continents
+                    .iter()
+                    .flat_map(|c| c.countries.iter())
+                    .flat_map(|country| country.leagues.leagues.iter())
+                    .any(|league| {
+                        league.schedule.has_matches_for_team_in_days(tid, current_date_chrono, 0)
+                    })
+            } else {
+                false
+            };
+
+            // Extract opponent info from schedule or post-match results
+            let fixture_id: u32 = 0;
+            let (opponent_name, competition_name) = if has_user_match_today {
+                if let Some(tid) = user_team_id {
+                    let scheduled = data
+                        .continents
+                        .iter()
+                        .flat_map(|c| c.countries.iter())
+                        .flat_map(|country| country.leagues.leagues.iter())
+                        .find_map(|league| {
+                            league.schedule.matches_for_team_in_days(tid, current_date_chrono, 0).next()
+                                .map(|item| {
+                                    let opp_id = if item.home_team_id == tid {
+                                        item.away_team_id
+                                    } else {
+                                        item.home_team_id
+                                    };
+                                    let opp_name = data.club(opp_id)
+                                        .map(|c| c.name.clone())
+                                        .unwrap_or_default();
+                                    (opp_name, league.name.clone())
+                                })
+                        });
+                    scheduled.unwrap_or((String::new(), String::new()))
+                } else {
+                    (String::new(), String::new())
+                }
+            } else {
+                // Fallback: check post-match results
+                let user_match = result.match_results.iter().find(|mr| {
+                    mr.home_team_id == user_club_id || mr.away_team_id == user_club_id
+                });
+                if let Some(mr) = user_match {
+                    let opp = if mr.home_team_id == user_club_id {
+                        mr.away_team_id
+                    } else {
+                        mr.home_team_id
+                    };
+                    let opp_name = data
+                        .club(opp)
+                        .map(|c| c.name.clone())
+                        .unwrap_or_default();
+                    (opp_name, mr.league_slug.clone())
+                } else {
+                    (String::new(), String::new())
+                }
+            };
+
+            // --- Transfer window detection ---
+            let (is_transfer_window_opening, is_transfer_window_closing) =
+                if data.club(user_club_id).is_some() {
+                    let country = data
+                        .continents
+                        .iter()
+                        .flat_map(|c| c.countries.iter())
+                        .find(|country| country.clubs.iter().any(|c| c.id == user_club_id));
+
+                    if let Some(country) = country {
+                        let twm = TransferWindowManager::for_country(country, current_date_chrono);
+                        let yesterday = current_date_chrono - Duration::days(1);
+                        let was_open = twm.is_window_open(country.id, yesterday);
+                        let is_open = twm.is_window_open(country.id, current_date_chrono);
+                        (!was_open && is_open, was_open && !is_open)
+                    } else {
+                        (false, false)
+                    }
+                } else {
+                    (false, false)
+                };
+
+            // --- Season-end detection ---
+            let season = Season::from_date(current_date_chrono);
+            let season_end = season.end_date();
+            let is_season_end = current_date_chrono == season_end;
+
+            // Resolve the user's league position from the league table.
+            let (league_position, expected_position) = if is_season_end {
+                if let Some(tid) = user_team_id {
+                    let pos = data
+                        .continents
+                        .iter()
+                        .flat_map(|c| c.countries.iter())
+                        .flat_map(|country| country.leagues.leagues.iter())
+                        .find_map(|league| {
+                            league
+                                .table
+                                .get()
+                                .iter()
+                                .position(|row| row.team_id == tid)
+                                .map(|p| (p + 1) as u8)
+                        })
+                        .unwrap_or(0);
+
+                    let expected = {
+                        let conf = data.game_state.board_confidence;
+                        if conf >= 75 { 1 } else if conf >= 50 { 5 } else { 10 }
+                    };
+                    (pos, expected)
+                } else {
+                    (0, 0)
+                }
+            } else {
+                (0, 0)
+            };
+
+            // --- Board evaluation at season end ---
+            if is_season_end && data.game_state.user_manager.is_some() {
+                let _verdict = data.game_state_mut().evaluate_board(
+                    league_position,
+                    expected_position,
+                );
+            }
+
+            // --- Job event detection ---
+            let board_conf = data.game_state.board_confidence;
+            let was_sacked = board_conf <= 15;
+            let sacking_reason = if was_sacked {
+                Some("Board lost confidence".to_string())
+            } else {
+                None
+            };
+            let contract_expiring = false;
+            let has_job_offer = false;
+            let offer_club_id: Option<u32> = None;
+            let offer_club_name: Option<String> = None;
+
+            // --- Generate job offers when sacked ---
+            if was_sacked {
+                data.game_state_mut().sack_user("Board lost confidence".to_string());
+                let available: Vec<(u32, String, u16)> = data
+                    .continents
+                    .iter()
+                    .flat_map(|c| c.countries.iter())
+                    .flat_map(|country| country.clubs.iter())
+                    .filter(|c| c.id != user_club_id)
+                    .map(|c| (c.id, c.name.clone(), 500))
+                    .take(5)
+                    .collect();
+                data.game_state_mut().generate_job_offers(&available);
+            }
+
+            if let Some(decision) = data.game_state.check_decision_points(
+                user_club_id,
+                has_user_match_today,
+                fixture_id,
+                &opponent_name,
+                &competition_name,
+                is_transfer_window_opening,
+                is_transfer_window_closing,
+                is_season_end,
+                league_position,
+                expected_position,
+                was_sacked,
+                sacking_reason,
+                contract_expiring,
+                has_job_offer,
+                offer_club_id,
+                offer_club_name,
+            ) {
+                data.game_state.set_decision(decision.clone());
+                result.pending_decision = Some(decision);
+            }
+        }
 
         let workload = data.workload_counts();
         perf.end_tick(TickEndContext {

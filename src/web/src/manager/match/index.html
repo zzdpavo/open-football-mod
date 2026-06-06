@@ -1,0 +1,66 @@
+{% extends "manager/manager_layout.html" %}
+
+{% block html_title %}Match Center | {{ i18n.t("site_name") }}{% endblock %}
+
+{% block content %}
+<div class="fm-page">
+    {% if has_pending_match %}
+    <section class="fm-panel">
+        <div class="fm-panel-head">
+            <h3>Upcoming Match</h3>
+            <span class="fm-badge fm-badge-inj">{{ competition }}</span>
+        </div>
+        <div class="fm-mgr-match-center">
+            <div class="fm-mgr-vs">
+                <span class="fm-mgr-vs-team">Your Team</span>
+                <span class="fm-mgr-vs-label">vs</span>
+                <span class="fm-mgr-vs-team">{{ opponent }}</span>
+            </div>
+        </div>
+        <div class="fm-mgr-form-actions">
+            <a href="/{{ lang }}/manager/tactics" class="fm-mgr-btn fm-mgr-btn-primary">
+                <i class="fa fa-cog"></i> Set Tactics
+            </a>
+        </div>
+    </section>
+    {% endif %}
+
+    <section class="fm-panel" style="margin-top:16px">
+        <div class="fm-panel-head">
+            <h3>Last Result</h3>
+        </div>
+        {% if let Some(lm) = last_match %}
+        <div class="fm-mgr-match-center">
+            <div class="fm-mgr-scoreboard">
+                <div class="fm-mgr-score-team">
+                    <span class="fm-mgr-score-name">{{ lm.home_team }}</span>
+                    <span class="fm-mgr-score-goals">{{ lm.home_score }}</span>
+                </div>
+                <div class="fm-mgr-score-team">
+                    <span class="fm-mgr-score-name">{{ lm.away_team }}</span>
+                    <span class="fm-mgr-score-goals">{{ lm.away_score }}</span>
+                </div>
+            </div>
+            <span class="fm-mgr-score-comp">{{ lm.competition }}</span>
+        </div>
+        {% else %}
+        <div class="fm-mgr-empty">
+            <p>No match results yet.</p>
+        </div>
+        {% endif %}
+    </section>
+
+    <div class="fm-mgr-form-actions" style="margin-top:16px">
+        <button class="fm-mgr-btn fm-mgr-btn-primary" onclick="advanceDay()">
+            <i class="fa fa-forward"></i> Advance Day
+        </button>
+    </div>
+</div>
+
+<script>
+function advanceDay() {
+    fetch('/api/game/career/advance', { method: 'POST' })
+        .then(() => location.reload());
+}
+</script>
+{% endblock %}

@@ -1,0 +1,218 @@
+{% extends "manager/manager_layout.html" %}
+
+{% block html_title %}Manager Dashboard | {{ i18n.t("site_name") }}{% endblock %}
+
+{% block content %}
+<div class="fm-page">
+    {% if has_career %}
+    <div class="fm-mgr-grid">
+        <section class="fm-panel">
+            <div class="fm-panel-head">
+                <h3>{{ manager_name }}</h3>
+            </div>
+            <div class="fm-mgr-info">
+                <div class="fm-mgr-row">
+                    <span class="fm-mgr-label">Club</span>
+                    <span class="fm-mgr-value">{{ club_name }}</span>
+                </div>
+                <div class="fm-mgr-row">
+                    <span class="fm-mgr-label">Season</span>
+                    <span class="fm-mgr-value">{{ current_season }}</span>
+                </div>
+                <div class="fm-mgr-row">
+                    <span class="fm-mgr-label">Reputation</span>
+                    <span class="fm-mgr-value">{{ reputation_score }} <span class="fm-mgr-tier">({{ reputation_tier }})</span></span>
+                </div>
+                <div class="fm-mgr-row">
+                    <span class="fm-mgr-label">Board Confidence</span>
+                    <div class="fm-mgr-bar">
+                        <div class="fm-mgr-bar-fill" style="width:{{ board_confidence }}%"></div>
+                        <span class="fm-mgr-bar-label">{{ board_confidence }}%</span>
+                    </div>
+                </div>
+                <div class="fm-mgr-row">
+                    <span class="fm-mgr-label">Status</span>
+                    <span class="fm-mgr-value">
+                        {% if pending_decision %}
+                            <span class="fm-badge fm-badge-inj">{{ decision_label }}</span>
+                        {% else %}
+                            <span class="fm-badge fm-mgr-ready">Ready</span>
+                        {% endif %}
+                    </span>
+                </div>
+            </div>
+        </section>
+
+        <section class="fm-panel">
+            <div class="fm-panel-head">
+                <h3>Quick Actions</h3>
+            </div>
+            <div class="fm-mgr-actions">
+                <button class="fm-mgr-btn fm-mgr-btn-primary" onclick="advanceDay()">
+                    <i class="fa fa-forward"></i> Advance Day
+                </button>
+                <button class="fm-mgr-btn fm-mgr-btn-secondary" onclick="advanceWeek()">
+                    <i class="fa fa-forward"></i> Advance Week
+                </button>
+            </div>
+        </section>
+    </div>
+
+    {% if has_history %}
+    <section class="fm-panel" style="margin-top:16px">
+        <div class="fm-panel-head">
+            <h3>Career History</h3>
+        </div>
+        <table class="fm-squad">
+            <thead>
+                <tr>
+                    <th class="sq-name">Club</th>
+                    <th>Season</th>
+                    <th>W</th>
+                    <th>D</th>
+                    <th>L</th>
+                    <th>Exp.Pos</th>
+                    <th>Act.Pos</th>
+                    <th>Rep</th>
+                    <th>Status</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for entry in history %}
+                <tr>
+                    <td class="sq-name">{{ entry.club_name }}</td>
+                    <td>{{ entry.start_season }}{% if let Some(end) = entry.end_season %}-{{ end }}{% endif %}</td>
+                    <td>{{ entry.wins }}</td>
+                    <td>{{ entry.draws }}</td>
+                    <td>{{ entry.losses }}</td>
+                    <td>{{ entry.expected_position }}</td>
+                    <td>{{ entry.actual_position }}</td>
+                    <td>{{ entry.reputation_start }}→{{ entry.reputation_end }}</td>
+                    <td>{% if entry.is_active %}<span class="fm-badge fm-mgr-ready">Active</span>{% else %}<span class="fm-badge fm-badge-lst">{{ entry.exit_reason }}</span>{% endif %}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </section>
+    {% endif %}
+
+    {% else %}
+    <section class="fm-panel fm-mgr-start-panel">
+        <div class="fm-panel-head">
+            <h3>Start Your Career</h3>
+        </div>
+        <div class="fm-mgr-start">
+            <div class="fm-mgr-start-step">
+                <div class="fm-mgr-step-num">1</div>
+                <div class="fm-mgr-step-content">
+                    <label class="fm-mgr-label">Manager Name</label>
+                    <div class="fm-mgr-name-row">
+                        <input type="text" class="fm-mgr-input" id="manager-first-input" placeholder="First name" maxlength="20">
+                        <input type="text" class="fm-mgr-input" id="manager-last-input" placeholder="Last name" maxlength="20">
+                    </div>
+                </div>
+            </div>
+            <div class="fm-mgr-start-step">
+                <div class="fm-mgr-step-num">2</div>
+                <div class="fm-mgr-step-content">
+                    <label class="fm-mgr-label">Choose Your Club</label>
+                    <input type="text" class="fm-mgr-input" id="club-search-input" placeholder="Search by team name...">
+                    <div class="fm-mgr-club-results" id="club-results"></div>
+                </div>
+            </div>
+            <div class="fm-mgr-start-step">
+                <div class="fm-mgr-step-num">3</div>
+                <div class="fm-mgr-step-content">
+                    <button class="fm-mgr-btn fm-mgr-btn-primary fm-mgr-btn-lg" id="start-career-btn" onclick="startCareer()" disabled>
+                        <i class="fa fa-play"></i> Take Control
+                    </button>
+                    <div class="fm-mgr-selected" id="selected-club"></div>
+                </div>
+            </div>
+        </div>
+    </section>
+    {% endif %}
+</div>
+
+<script>
+let selectedClubId = null;
+
+function formatBalance(b) {
+    if (b >= 1_000_000_000) return '€' + (b / 1_000_000_000).toFixed(1) + 'B';
+    if (b >= 1_000_000) return '€' + (b / 1_000_000).toFixed(1) + 'M';
+    if (b >= 1_000) return '€' + (b / 1_000).toFixed(0) + 'K';
+    return '€' + b;
+}
+
+function repBar(score) {
+    const pct = Math.round(score * 100);
+    const color = pct >= 70 ? '#4caf50' : pct >= 40 ? '#ff9800' : '#f44336';
+    return '<div class="fm-mgr-rep-bar"><div class="fm-mgr-rep-fill" style="width:' + pct + '%;background:' + color + '"></div></div>';
+}
+
+document.getElementById('club-search-input').addEventListener('input', function() {
+    const query = this.value.trim().toLowerCase();
+    const results = document.getElementById('club-results');
+    if (query.length < 2) { results.innerHTML = ''; return; }
+
+    fetch('/api/game/career/clubs?q=' + encodeURIComponent(query))
+        .then(r => r.json())
+        .then(clubs => {
+            results.innerHTML = clubs.map(c => {
+                const sel = c.id === selectedClubId ? ' selected' : '';
+                return '<div class="fm-mgr-club-card' + sel + '" data-id="' + c.id + '" onclick="selectClub(this)">' +
+                    '<div class="fm-mgr-club-card-header" style="background:' + c.color_primary + ';color:' + c.color_secondary + '">' +
+                        '<span class="fm-mgr-club-card-name">' + c.name + '</span>' +
+                        '<span class="fm-mgr-club-card-tier">' + c.reputation_tier + '</span>' +
+                    '</div>' +
+                    '<div class="fm-mgr-club-card-body">' +
+                        '<div class="fm-mgr-club-card-row"><span>Reputation</span><span>' + Math.round(c.reputation * 100) + '</span></div>' +
+                        repBar(c.reputation) +
+                        '<div class="fm-mgr-club-card-row"><span>Squad Size</span><span>' + c.player_count + '</span></div>' +
+                        '<div class="fm-mgr-club-card-row"><span>Balance</span><span>' + formatBalance(c.balance) + '</span></div>' +
+                        '<div class="fm-mgr-club-card-row"><span>Status</span><span>' + c.status + '</span></div>' +
+                        '<div class="fm-mgr-club-card-country">' + (c.country || '') + '</div>' +
+                    '</div>' +
+                '</div>';
+            }).join('');
+        })
+        .catch(() => { results.innerHTML = '<div class="fm-mgr-club-empty">Search unavailable</div>'; });
+});
+
+function selectClub(el) {
+    selectedClubId = parseInt(el.dataset.id);
+    const nameEl = el.querySelector('.fm-mgr-club-card-name');
+    document.getElementById('selected-club').textContent = nameEl ? nameEl.textContent : '';
+    document.getElementById('selected-club').style.display = 'block';
+    document.getElementById('start-career-btn').disabled = false;
+    document.querySelectorAll('.fm-mgr-club-card').forEach(card => {
+        card.classList.toggle('selected', parseInt(card.dataset.id) === selectedClubId);
+    });
+}
+
+function startCareer() {
+    const first = document.getElementById('manager-first-input').value.trim();
+    const last = document.getElementById('manager-last-input').value.trim();
+    const managerName = (first + ' ' + last).trim() || 'Manager';
+    if (!selectedClubId) return;
+    fetch('/api/game/career/start', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ club_id: selectedClubId, manager_name: managerName })
+    })
+    .then(r => r.json())
+    .then(data => { if (data.success) { location.reload(); } else { alert(data.error || 'Failed'); } })
+    .catch(() => alert('Network error'));
+}
+
+function advanceDay() {
+    fetch('/api/game/career/advance', { method: 'POST' })
+        .then(() => location.reload());
+}
+
+function advanceWeek() {
+    fetch('/api/game/process?days=7', { method: 'POST' })
+        .then(() => { setTimeout(() => location.reload(), 2000); });
+}
+</script>
+{% endblock %}

@@ -78,6 +78,8 @@ pub struct Staff {
     ///
     /// Indices match `PlayerFieldPositionGroup` discriminants.
     pub specialization_days: [u32; 4],
+
+    pub manager_career: Option<crate::career::ManagerCareerState>,
 }
 
 #[derive(Debug, Clone)]
@@ -459,6 +461,7 @@ impl Staff {
             training_schedule: Vec::new(),
             recent_events: Vec::new(),
             specialization_days: [0; 4],
+            manager_career: None,
         }
     }
 

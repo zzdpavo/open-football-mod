@@ -474,3 +474,44 @@ pub fn copa_libertadores_menu(i18n: &I18n, lang: &str, current_path: &str) -> Ve
 pub fn national_competitions_menu(i18n: &I18n, lang: &str, current_path: &str) -> Vec<MenuSection> {
     continental_competitions_menu(i18n, lang, current_path)
 }
+
+pub fn manager_menu(i18n: &I18n, lang: &str, current_path: &str, has_career: bool) -> Vec<MenuSection> {
+    let mut sections = vec![home_section(i18n, lang)];
+
+    if has_career {
+        let overview_url = format!("/{}/manager", lang);
+        let tactics_url = format!("/{}/manager/tactics", lang);
+        let transfers_url = format!("/{}/manager/transfers", lang);
+        let match_url = format!("/{}/manager/match", lang);
+
+        sections.push(MenuSection::plain(vec![
+            MenuItem {
+                active: current_path == overview_url,
+                title: i18n.t("overview").to_string(),
+                url: overview_url,
+                icon: "fa-home".to_string(),
+            },
+            MenuItem {
+                active: current_path == tactics_url,
+                title: i18n.t("tactics").to_string(),
+                url: tactics_url,
+                icon: "fa-chess".to_string(),
+            },
+            MenuItem {
+                active: current_path == transfers_url,
+                title: i18n.t("transfers").to_string(),
+                url: transfers_url,
+                icon: "fa-exchange-alt".to_string(),
+            },
+            MenuItem {
+                active: current_path == match_url,
+                title: i18n.t("matches").to_string(),
+                url: match_url,
+                icon: "fa-futbol".to_string(),
+            },
+        ]));
+    }
+
+    sections.push(search_section(i18n, lang, current_path));
+    sections
+}

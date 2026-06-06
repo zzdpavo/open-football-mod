@@ -1,0 +1,141 @@
+{% extends "manager/manager_layout.html" %}
+
+{% block html_title %}Transfers | {{ i18n.t("site_name") }}{% endblock %}
+
+{% block content %}
+<div class="fm-page">
+    <section class="fm-panel">
+        <div class="fm-panel-head">
+            <h3>Transfer Budget</h3>
+        </div>
+        {% if let Some(budget) = budget %}
+        <div class="fm-mgr-budget">
+            <div class="fm-mgr-budget-item">
+                <span class="fm-mgr-budget-label">Total</span>
+                <span class="fm-mgr-budget-value">{{ budget.total }}</span>
+            </div>
+            <div class="fm-mgr-budget-item">
+                <span class="fm-mgr-budget-label">Spent</span>
+                <span class="fm-mgr-budget-value">{{ budget.spent }}</span>
+            </div>
+            <div class="fm-mgr-budget-item">
+                <span class="fm-mgr-budget-label">Available</span>
+                <span class="fm-mgr-budget-value fm-mgr-budget-available">{{ budget.available }}</span>
+            </div>
+        </div>
+        {% else %}
+        <div class="fm-mgr-empty"><p>No budget information.</p></div>
+        {% endif %}
+    </section>
+
+    <section class="fm-panel" style="margin-top:16px">
+        <div class="fm-panel-head">
+            <h3>Make a Bid</h3>
+        </div>
+        <form id="bid-form" class="fm-mgr-form">
+            <div class="fm-mgr-form-row">
+                <div class="fm-mgr-form-group">
+                    <label class="fm-mgr-label">Target Player ID</label>
+                    <input type="number" class="fm-mgr-input" id="bid-player-id" required>
+                </div>
+                <div class="fm-mgr-form-group">
+                    <label class="fm-mgr-label">Offer Amount</label>
+                    <input type="number" class="fm-mgr-input" id="bid-amount" step="0.01" required>
+                </div>
+                <div class="fm-mgr-form-group">
+                    <button type="submit" class="fm-mgr-btn fm-mgr-btn-primary">Submit Bid</button>
+                </div>
+            </div>
+        </form>
+    </section>
+
+    <section class="fm-panel" style="margin-top:16px">
+        <div class="fm-panel-head">
+            <h3>List Player for Sale</h3>
+        </div>
+        <form id="list-form" class="fm-mgr-form">
+            <div class="fm-mgr-form-row">
+                <div class="fm-mgr-form-group">
+                    <label class="fm-mgr-label">Player ID</label>
+                    <input type="number" class="fm-mgr-input" id="list-player-id" required>
+                </div>
+                <div class="fm-mgr-form-group">
+                    <label class="fm-mgr-label">Asking Price</label>
+                    <input type="number" class="fm-mgr-input" id="list-price" step="0.01">
+                </div>
+                <div class="fm-mgr-form-group">
+                    <button type="submit" class="fm-mgr-btn fm-mgr-btn-secondary">List for Sale</button>
+                </div>
+            </div>
+        </form>
+    </section>
+
+    <section class="fm-panel" style="margin-top:16px">
+        <div class="fm-panel-head">
+            <h3>Squad</h3>
+        </div>
+        <table class="fm-squad">
+            <thead>
+                <tr>
+                    <th class="sq-name">Name</th>
+                    <th>Position</th>
+                    <th class="sq-cond">Condition</th>
+                    <th></th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for p in players %}
+                <tr>
+                    <td class="sq-name">{{ p.name }}</td>
+                    <td>{{ p.position }}</td>
+                    <td class="sq-cond">
+                        <div class="fm-cond">
+                            <div class="fm-cond-bar"><div class="fm-cond-fill" style="width:{{ p.condition }}%"></div></div>
+                            <span class="fm-cond-val">{{ p.condition }}%</span>
+                        </div>
+                    </td>
+                    <td><button class="fm-mgr-btn-sm" onclick="quickList({{ p.id }})">List</button></td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </section>
+</div>
+
+<script>
+document.getElementById('bid-form')?.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const data = {
+        target_player_id: parseInt(document.getElementById('bid-player-id').value),
+        offering_amount: parseFloat(document.getElementById('bid-amount').value),
+        is_loan: false
+    };
+    const resp = await fetch('/api/game/career/transfer-bid', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data)
+    });
+    const result = await resp.json();
+    if (result.error) alert(result.error);
+    else location.reload();
+});
+
+document.getElementById('list-form')?.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const data = {
+        player_id: parseInt(document.getElementById('list-player-id').value),
+        listing_type: "AskingPrice",
+        asking_price: parseFloat(document.getElementById('list-price').value || '0')
+    };
+    const resp = await fetch('/api/game/career/transfer-list-player', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data)
+    });
+    const result = await resp.json();
+    if (result.error) alert(result.error);
+    else location.reload();
+});
+
+function quickList(playerId) {
+    document.getElementById('list-player-id').value = playerId;
+    document.getElementById('list-form').scrollIntoView({ behavior: 'smooth' });
+}
+</script>
+{% endblock %}

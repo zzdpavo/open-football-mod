@@ -13,6 +13,7 @@ mod game;
 pub mod i18n;
 mod leagues;
 mod r#match;
+mod manager;
 mod national_competitions;
 mod performance;
 mod player;

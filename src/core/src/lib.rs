@@ -11,6 +11,7 @@ pub mod performance;
 pub mod shared;
 pub mod simulator;
 pub mod transfers;
+pub mod career;
 pub mod utils;
 
 use std::sync::OnceLock;

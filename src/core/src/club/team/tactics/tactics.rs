@@ -7,7 +7,9 @@ use std::cmp::Ordering;
 pub struct Tactics {
     pub tactic_type: MatchTacticType,
     pub selected_reason: TacticSelectionReason,
-    pub formation_strength: f32, // 0.0 to 1.0 indicating how well this formation suits the team
+    pub formation_strength: f32,
+    #[serde(default)]
+    pub tactical_style_override: Option<TacticalStyle>,
 }
 
 #[derive(Debug, Clone, Ord, PartialOrd, Eq, PartialEq, Serialize, Deserialize)]
@@ -25,6 +27,7 @@ impl Tactics {
             tactic_type,
             selected_reason: TacticSelectionReason::Default,
             formation_strength: 0.5,
+            tactical_style_override: None,
         }
     }
 
@@ -37,6 +40,21 @@ impl Tactics {
             tactic_type,
             selected_reason: reason,
             formation_strength: strength.clamp(0.0, 1.0),
+            tactical_style_override: None,
+        }
+    }
+
+    pub fn with_style_override(
+        tactic_type: MatchTacticType,
+        reason: TacticSelectionReason,
+        strength: f32,
+        style: TacticalStyle,
+    ) -> Self {
+        Tactics {
+            tactic_type,
+            selected_reason: reason,
+            formation_strength: strength.clamp(0.0, 1.0),
+            tactical_style_override: Some(style),
         }
     }
 
@@ -162,6 +180,9 @@ impl Tactics {
     }
 
     pub fn tactical_style(&self) -> TacticalStyle {
+        if let Some(ref style) = self.tactical_style_override {
+            return style.clone();
+        }
         match self.tactic_type {
             MatchTacticType::T442
             | MatchTacticType::T442Diamond
@@ -234,7 +255,7 @@ impl Tactics {
     }
 }
 
-#[derive(Debug, PartialEq, Clone)]
+#[derive(Debug, PartialEq, Clone, Serialize, Deserialize)]
 pub enum TacticalStyle {
     Attacking,
     Defensive,
@@ -1448,5 +1469,48 @@ mod tests {
             &player_refs,
         );
         assert!(new_tactic.is_none());
+    }
+
+    #[test]
+    fn tactical_style_override_overrides_derived() {
+        let tactics = Tactics::with_style_override(
+            MatchTacticType::T433,
+            TacticSelectionReason::CoachPreference,
+            0.8,
+            TacticalStyle::Defensive,
+        );
+        assert_eq!(tactics.tactical_style(), TacticalStyle::Defensive);
+    }
+
+    #[test]
+    fn tactical_style_none_uses_derived() {
+        let tactics = Tactics::new(MatchTacticType::T433);
+        assert_eq!(tactics.tactical_style(), TacticalStyle::Attacking);
+    }
+
+    #[test]
+    fn tactics_serialization_roundtrip_with_override() {
+        let tactics = Tactics::with_style_override(
+            MatchTacticType::T433,
+            TacticSelectionReason::CoachPreference,
+            0.8,
+            TacticalStyle::Defensive,
+        );
+        let json = serde_json::to_string(&tactics).unwrap();
+        let deserialized: Tactics = serde_json::from_str(&json).unwrap();
+        assert_eq!(deserialized.tactic_type, MatchTacticType::T433);
+        assert_eq!(
+            deserialized.tactical_style_override,
+            Some(TacticalStyle::Defensive)
+        );
+    }
+
+    #[test]
+    fn tactics_deserialization_without_override_field() {
+        let json = r#"{"tactic_type":"T433","selected_reason":"Default","formation_strength":0.5}"#;
+        let deserialized: Tactics = serde_json::from_str(json).unwrap();
+        assert_eq!(deserialized.tactic_type, MatchTacticType::T433);
+        assert_eq!(deserialized.tactical_style_override, None);
+        assert_eq!(deserialized.tactical_style(), TacticalStyle::Attacking);
     }
 }
