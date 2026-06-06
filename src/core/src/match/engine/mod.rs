@@ -2,6 +2,7 @@ pub mod ball;
 pub mod engine;
 pub mod events;
 pub mod flow;
+pub mod instant;
 pub mod officiating;
 pub mod player;
 pub mod psychology;

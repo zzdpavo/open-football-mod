@@ -1,0 +1,158 @@
+use std::collections::HashMap;
+
+use crate::PlayerFieldPositionGroup;
+use crate::r#match::engine::result::PlayerMatchEndStats;
+use crate::r#match::engine::zones::ZoneStats;
+
+use super::calibration;
+
+#[derive(Debug, Clone)]
+pub struct InstantPlayerStats {
+    pub team_id: u32,
+    pub position_group: PlayerFieldPositionGroup,
+    pub shots_on_target: u16,
+    pub shots_total: u16,
+    pub passes_attempted: u16,
+    pub passes_completed: u16,
+    pub tackles: u16,
+    pub interceptions: u16,
+    pub saves: u16,
+    pub shots_faced: u16,
+    pub goals: u16,
+    pub assists: u16,
+    pub xg: f32,
+    pub fouls: u16,
+    pub yellow_cards: u16,
+    pub red_cards: u16,
+    pub key_passes: u16,
+    pub progressive_passes: u16,
+    pub progressive_carries: u16,
+    pub successful_dribbles: u16,
+    pub attempted_dribbles: u16,
+    pub successful_pressures: u16,
+    pub pressures: u16,
+    pub blocks: u16,
+    pub clearances: u16,
+    pub passes_into_box: u16,
+    pub crosses_attempted: u16,
+    pub crosses_completed: u16,
+    pub xg_chain: f32,
+    pub xg_buildup: f32,
+    pub miscontrols: u16,
+    pub heavy_touches: u16,
+    pub carry_distance: u32,
+    pub errors_leading_to_shot: u16,
+    pub errors_leading_to_goal: u16,
+    pub xg_prevented: f32,
+    pub offsides: u16,
+    pub own_goals: u16,
+    pub starting_condition: i16,
+    pub current_condition: i16,
+    pub entry_time_ms: u64,
+    pub subbed_out: bool,
+    pub subbed_out_time_ms: u64,
+    pub injured: bool,
+}
+
+impl InstantPlayerStats {
+    pub fn new(team_id: u32, position_group: PlayerFieldPositionGroup, condition: i16) -> Self {
+        InstantPlayerStats {
+            team_id,
+            position_group,
+            shots_on_target: 0,
+            shots_total: 0,
+            passes_attempted: 0,
+            passes_completed: 0,
+            tackles: 0,
+            interceptions: 0,
+            saves: 0,
+            shots_faced: 0,
+            goals: 0,
+            assists: 0,
+            xg: 0.0,
+            fouls: 0,
+            yellow_cards: 0,
+            red_cards: 0,
+            key_passes: 0,
+            progressive_passes: 0,
+            progressive_carries: 0,
+            successful_dribbles: 0,
+            attempted_dribbles: 0,
+            successful_pressures: 0,
+            pressures: 0,
+            blocks: 0,
+            clearances: 0,
+            passes_into_box: 0,
+            crosses_attempted: 0,
+            crosses_completed: 0,
+            xg_chain: 0.0,
+            xg_buildup: 0.0,
+            miscontrols: 0,
+            heavy_touches: 0,
+            carry_distance: 0,
+            errors_leading_to_shot: 0,
+            errors_leading_to_goal: 0,
+            xg_prevented: 0.0,
+            offsides: 0,
+            own_goals: 0,
+            starting_condition: condition,
+            current_condition: condition,
+            entry_time_ms: 0,
+            subbed_out: false,
+            subbed_out_time_ms: 0,
+            injured: false,
+        }
+    }
+
+    pub fn drain_condition(&mut self, minutes: f32) {
+        let drain = (calibration::CONDITION_DRAIN_PER_MINUTE * minutes) as i16;
+        self.current_condition = (self.current_condition - drain).max(calibration::CONDITION_FLOOR);
+    }
+
+    pub fn to_end_stats(&self, minutes_played: u16) -> PlayerMatchEndStats {
+        PlayerMatchEndStats {
+            shots_on_target: self.shots_on_target,
+            shots_total: self.shots_total,
+            passes_attempted: self.passes_attempted,
+            passes_completed: self.passes_completed,
+            tackles: self.tackles,
+            interceptions: self.interceptions,
+            saves: self.saves,
+            shots_faced: self.shots_faced,
+            goals: self.goals,
+            assists: self.assists,
+            match_rating: 0.0,
+            xg: self.xg,
+            position_group: self.position_group,
+            fouls: self.fouls,
+            yellow_cards: self.yellow_cards,
+            red_cards: self.red_cards,
+            minutes_played,
+            key_passes: self.key_passes,
+            progressive_passes: self.progressive_passes,
+            progressive_carries: self.progressive_carries,
+            successful_dribbles: self.successful_dribbles,
+            attempted_dribbles: self.attempted_dribbles,
+            successful_pressures: self.successful_pressures,
+            pressures: self.pressures,
+            blocks: self.blocks,
+            clearances: self.clearances,
+            passes_into_box: self.passes_into_box,
+            crosses_attempted: self.crosses_attempted,
+            crosses_completed: self.crosses_completed,
+            xg_chain: self.xg_chain,
+            xg_buildup: self.xg_buildup,
+            miscontrols: self.miscontrols,
+            heavy_touches: self.heavy_touches,
+            carry_distance: self.carry_distance,
+            errors_leading_to_shot: self.errors_leading_to_shot,
+            errors_leading_to_goal: self.errors_leading_to_goal,
+            xg_prevented: self.xg_prevented,
+            offsides: self.offsides,
+            own_goals: self.own_goals,
+            zone_stats: ZoneStats::default(),
+        }
+    }
+}
+
+pub type PlayerStatsMap = HashMap<u32, InstantPlayerStats>;

@@ -1,4 +1,5 @@
 use super::engine::FootballEngine;
+use super::engine::instant::InstantEngine;
 use crate::MatchRuntime;
 use crate::r#match::{MatchResult, MatchSquad};
 use log::debug;
@@ -78,14 +79,22 @@ impl Match {
         let away_team_id = self.away_squad.team_id;
         let away_team_name = String::from(&self.away_squad.team_name);
 
-        let match_recordings = MatchRuntime::recordings_mode() && !self.is_friendly;
-        let match_result = FootballEngine::<840, 545>::play(
-            self.home_squad,
-            self.away_squad,
-            match_recordings,
-            self.is_friendly,
-            self.is_knockout,
-        );
+        let use_instant = MatchRuntime::instant_engine_mode()
+            && !MatchRuntime::is_user_team(home_team_id)
+            && !MatchRuntime::is_user_team(away_team_id);
+
+        let match_result = if use_instant {
+            InstantEngine::play(&self.home_squad, &self.away_squad, self.is_knockout)
+        } else {
+            let match_recordings = MatchRuntime::recordings_mode() && !self.is_friendly;
+            FootballEngine::<840, 545>::play(
+                self.home_squad,
+                self.away_squad,
+                match_recordings,
+                self.is_friendly,
+                self.is_knockout,
+            )
+        };
 
         let score = match_result.score.as_ref().expect("no score");
 

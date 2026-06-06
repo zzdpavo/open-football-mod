@@ -240,6 +240,16 @@ impl FootballSimulator {
             // rather than open-coded Vec<Option<ContinentBuildOutput>>.
             let mut wm = WorldMatchdayResult::from_builds(builds);
 
+            // Wire instant-engine flags BEFORE the global batch
+            // dispatch so every rayon worker sees the same atomics.
+            // In interactive mode (career active) non-user matches
+            // use the fast possession-chain engine; user matches
+            // always use the full FootballEngine.
+            MatchRuntime::set_instant_engine_mode(data.game_state.interactive_mode);
+            MatchRuntime::set_user_team_id(
+                data.game_state.user_manager.as_ref().map_or(0, |m| m.club_id),
+            );
+
             // A2: root-level dispatch + per-continent fan-out. Single
             // `engine_pool().play(..)` call across the entire world.
             wm.process(&mut data.continents, world);

@@ -409,10 +409,15 @@ pub use crate::r#match::player::strategies::players::ops::forward_shot_decision:
 #[cfg(feature = "match-logs")]
 pub use crate::r#match::player::strategies::players::ops::forward_shot_decision::mid_run_diag;
 
+use std::sync::atomic::AtomicU32;
+
 static STORE_MATCH_EVENTS_MODE: AtomicBool = AtomicBool::new(false);
 static MATCH_RECORDINGS_MODE: AtomicBool = AtomicBool::new(false);
 static MATCH_STORE_MAX_THREADS: AtomicUsize = AtomicUsize::new(4);
 static MATCH_ENGINE_POOL: OnceLock<r#match::MatchPlayEnginePool> = OnceLock::new();
+static INSTANT_ENGINE_MODE: AtomicBool = AtomicBool::new(false);
+static USER_TEAM_ID: AtomicU32 = AtomicU32::new(0);
+const NO_USER_TEAM: u32 = 0;
 
 /// Process-global match-engine runtime configuration and the shared engine
 /// pool. The web crate flips these flags at startup (see `settings.rs`) and
@@ -460,5 +465,26 @@ impl MatchRuntime {
                 .unwrap_or(4);
             r#match::MatchPlayEnginePool::new(cpus)
         })
+    }
+
+    pub fn set_instant_engine_mode(enabled: bool) {
+        INSTANT_ENGINE_MODE.store(enabled, Ordering::SeqCst);
+    }
+
+    pub fn instant_engine_mode() -> bool {
+        INSTANT_ENGINE_MODE.load(Ordering::SeqCst)
+    }
+
+    pub fn set_user_team_id(team_id: u32) {
+        USER_TEAM_ID.store(team_id, Ordering::SeqCst);
+    }
+
+    pub fn user_team_id() -> u32 {
+        USER_TEAM_ID.load(Ordering::SeqCst)
+    }
+
+    pub fn is_user_team(team_id: u32) -> bool {
+        let uid = USER_TEAM_ID.load(Ordering::SeqCst);
+        uid != NO_USER_TEAM && uid == team_id
     }
 }
