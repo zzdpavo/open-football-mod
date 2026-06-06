@@ -453,8 +453,10 @@ impl SimulatorData {
                                 (p.id, p.full_name.to_string(), was_released_early)
                             })
                             .collect();
+                        let team_info = team.history_info();
                         for (id, player_name, released_early) in candidates {
                             if let Some(mut p) = team.players.take_player(&id) {
+                                p.on_release(&team_info, date);
                                 let reason = if released_early {
                                     "dec_reason_released_free".to_string()
                                 } else {
